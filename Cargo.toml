@@ -1,6 +1,7 @@
 [package]
 name = "opt_args"
 version = "0.0.1"
+license = "Apache-2.0"
 authors = ["Princic-1837592 <andreapri.99@gmail.com>"]
 description = "Create macros for functions and structs with default values"
 keywords = ["proc_macro", "procmacro", "function", "struct", "optional", "arguments"]
