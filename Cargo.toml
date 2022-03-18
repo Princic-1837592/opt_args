@@ -4,6 +4,7 @@ version = "0.0.1"
 license = "Apache-2.0"
 authors = ["Princic-1837592 <andreapri.99@gmail.com>"]
 description = "Create macros for functions and structs with default values"
+repository = "https://github.com/Princic-1837592/opt_args"
 keywords = ["macro", "function", "struct", "optional", "arguments"]
 edition = "2021"
 
