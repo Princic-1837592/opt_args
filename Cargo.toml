@@ -1,0 +1,16 @@
+[package]
+name = "opt_args"
+version = "0.0.1"
+authors = ["Princic-1837592 <andreapri.99@gmail.com>"]
+description = "Create macros for functions and structs with default values"
+keywords = ["proc_macro", "procmacro", "function", "struct", "optional", "arguments"]
+edition = "2021"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+quote = "1"
+proc-macro2 = "1.0"
+syn = { version = "1.0", features = ["full"] }
+itertools = "0.10.3"
