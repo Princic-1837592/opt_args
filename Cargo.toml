@@ -10,6 +10,7 @@ edition = "2021"
 
 [lib]
 proc-macro = true
+doctest = false
 
 [dependencies]
 quote = "1"
