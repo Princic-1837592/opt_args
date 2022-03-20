@@ -2,7 +2,7 @@
 
 This crate allows you to auto-generate macros to call functions and instantiate structs with default named arguments
 
-Import the macro and use it on a function or struct definition like this
+Import the macro and use it on a function or struct like this
 ```rust
 use opt_args::opt_args;
 
@@ -29,3 +29,5 @@ fn main() {
     println!("{:#?}", S!(4, z = 5));
 }
 ```
+
+Full documentation [here](https://docs.rs/opt_args/latest/opt_args/)

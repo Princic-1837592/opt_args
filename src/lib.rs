@@ -24,7 +24,7 @@ use crate::functions::{combinations, fn_arg_to_name, macro_branches, Combination
 /// Apply to a function or struct to generate a macro that can be called with named optional arguments.
 ///
 /// Please note that in order to obtain the result, [`macro@opt_args`] creates a macro with a number
-/// of branches that is in `O((n+1)!)` w.r.t. the number `n` of optional arguments,
+/// of branches that is in `O((n+1)!)`, where `n` is the number of optional arguments,
 /// which means that compiling a function with 5 optional arguments will result
 /// in a macro with ~400 branches. Although this is a very rare case, consider not giving
 /// your functions too many optional arguments or consider using another macro,
@@ -32,10 +32,11 @@ use crate::functions::{combinations, fn_arg_to_name, macro_branches, Combination
 ///
 /// You can provide default values for optional arguments or leave them blank:
 /// if left blank, Default::default() will be used (if possible, otherwise the macro won't work).
-/// For example, blank default values are usually not available for references.
+/// For example, blank default values are usually not possible for references.
 /// In that case you must specify the default value for the argument.
 ///
-/// Examples below are about functions but the same goes for structs: same rules, same syntax.
+/// Examples below are about functions but the same goes for structs:
+/// same rules, same syntax, same limitations.
 ///
 /// Optional arguments must cover all the final positions from the first optional argument to the
 /// last function argument. For example:
@@ -56,11 +57,11 @@ use crate::functions::{combinations, fn_arg_to_name, macro_branches, Combination
 /// }
 /// ```
 /// where all arguments after the first optional (`c`) are optional.
-/// In other words: if you mark `n` arguments as optional, they **must be the last** `n` arguments
+/// In other words: if you mark `n` arguments as optional, they **must be the last `n` arguments**
 /// of the function.
 ///
 /// Optional arguments can be passed to the macro in any order,
-/// in both the [`macro@opt_args`] and the function macro calls.
+/// in both the [`macro@opt_args`] and the generated macro calls.
 /// For example:
 /// ```
 /// #[opt_args(d, c = 5, e)]
@@ -72,11 +73,12 @@ use crate::functions::{combinations, fn_arg_to_name, macro_branches, Combination
 ///
 /// To use the function macro, simply use the name of the function as a macro and pass first the
 /// positional required arguments, then the named optional arguments (in any order),
-/// like in the following (referred to previous examples):
+/// like in the following:
 /// ```
 /// f!(1, 2, e = 6, c = 3);
 /// ```
-/// In this case we would have `d = 0`, since no default value was provided for the optional `d`.
+/// In this case we would have `d = 0`,
+/// since no custom default value was provided for the optional `d`.
 ///
 /// Once an argument is marked as optional, it cannot be used as positional in the function macro:
 /// ```
@@ -88,7 +90,7 @@ use crate::functions::{combinations, fn_arg_to_name, macro_branches, Combination
 /// f!(1, 2, c = 3, d = 5);
 /// ```
 ///
-/// The macro is made in such a way that it is possible to use the function macro inside the
+/// The macro is generated in such a way that it is possible to use the function macro inside the
 /// original function:
 /// ```
 /// #[opt_args(d, c = 5, e)]
@@ -122,6 +124,9 @@ pub fn opt_args(attr: TokenStream, item: TokenStream) -> TokenStream {
 ///     f!(1, c = 3, b = 2); //WRONG: arguments not in the same order of the original function
 /// }
 /// ```
+///
+/// This macro was added to make the compilation faster in the case of functions with more
+/// than 5 optional arguments.
 #[proc_macro_attribute]
 pub fn opt_args_ord(attr: TokenStream, item: TokenStream) -> TokenStream {
     internal(attr, item, CombinationType::Ordered)
