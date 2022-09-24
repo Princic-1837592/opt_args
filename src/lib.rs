@@ -24,22 +24,28 @@ mod parser;
 
 /// Apply to a function or struct to generate a macro that can be called with named optional arguments.
 ///
+/// <span style="color:red">**IMPORTANT**</span>:
 /// Please note that in order to obtain the result,
 /// [`macro@opt_args`] creates a macro that matches any possible combination of given arguments,
-/// with a number of branches that is in `O(n!)`, where `n` is the number of optional arguments,
-/// which means that compiling a function with 5 optional arguments will result
-/// in a macro with `~400` branches. Although this has no impact on runtime, it impacts on compile time,
+/// with a number of branches that is in `O(n!)`, where `n` is the number of optional arguments.
+/// This means that compiling a function with 5 optional arguments will result
+/// in a macro with `~400` branches.
+///
+/// Although this has no impact on runtime, it impacts on compile time,
 /// so consider not giving your functions too many optional arguments,
 /// or consider using another macro (like [`macro@opt_args_ord`]).
 ///
+/// # Usage
+/// Annotate your function or struct with the macro
+/// and list the arguments that you want to make optional.
 /// You can provide default values for optional arguments or leave them blank:
 /// if left blank, `Default::default()` will be used (if possible, otherwise the macro won't work).
-/// For example, blank default values are usually not possible for references.
-/// In that case you must specify the default value for the argument.
 ///
+/// # Examples
 /// Examples below are about functions but the same goes for structs:
 /// same rules, same syntax, same limitations.
 ///
+/// ## Annotating
 /// Optional arguments must cover all the final positions from the first optional argument to the
 /// last function argument. For example:
 /// ```compile_fail
@@ -50,10 +56,10 @@ mod parser;
 ///     println!("a = {}, b = {}, c = {}, d = {}, e = {}", a, b, c, d, e);
 /// }
 /// ```
-/// is not a valid macro call since arguments `d` and `e` are not optional,
+/// is not a valid annotation since arguments `d` and `e` are not optional,
 /// but they come after `c` which is optional.
 /// Since all the arguments after the first optional must be optional,
-/// one correct macro call (w.r.t. `c` being the first optional) would be the following:
+/// one correct annotation (with `c` being the first optional) would be the following:
 /// ```
 /// # use opt_args::*;
 /// #
@@ -79,8 +85,9 @@ mod parser;
 ///     a + b + c + d + e
 /// }
 /// ```
-/// would be a correct macro call, and the code generated would be the same as before.
+/// would be a correct annotation, and the code generated would be the same as before.
 ///
+/// ## Calling
 /// To use the function macro, simply use the name of the function as a macro and pass first the
 /// positional required arguments, then the named optional arguments (in any order),
 /// like in the following:
@@ -110,6 +117,7 @@ mod parser;
 /// ```
 /// is not a valid call since `c` is used as positional (with value `3`).
 ///
+/// ## Recursion
 /// It's also possible to use the generated macro inside the original function:
 /// ```
 /// # use opt_args::*;
@@ -127,6 +135,31 @@ mod parser;
 /// assert_eq!(result, 5);
 /// ```
 /// which would result in a recursive call.
+///
+/// ## Default::default
+/// If you don't specify a default value for an argument,
+/// the macro will assume that you want to use `Default::default()`.
+/// This may lead to errors if the type of your argument does not implement `Default`,
+/// but only when you call the function as a macro, not in the annotation:
+/// ```
+/// # use opt_args::*;
+/// #
+/// #[opt_args(a)]
+/// fn f(a: &Vec<String>) -> Vec<String> {
+///     a.clone()
+/// }
+/// ```
+/// The above would compile perfectly, but when we try to use the generated macro:
+/// ```compile_fail
+/// # use opt_args::*;
+/// #
+/// # #[opt_args(a)]
+/// # fn f(a: &Vec<String>) -> Vec<String> {
+/// #     a.clone()
+/// # }
+/// assert_eq!(f!(), Vec::new());
+/// ```
+/// it will raise a compile time error: the trait `Default` is not implemented for `&Vec<String>`
 #[proc_macro_attribute]
 pub fn opt_args(attr: TokenStream, item: TokenStream) -> TokenStream {
     internal(attr, item, CombinationType::Unordered)
@@ -145,6 +178,7 @@ pub fn opt_args(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// }
 /// ```
 ///
+/// And use them in the same order as they are in the function
 /// ```
 /// # use opt_args::*;
 /// #
@@ -152,16 +186,18 @@ pub fn opt_args(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// # fn f(a: i32, b: i32, c: i32) -> (i32, i32, i32) {
 /// #     (a, b, c)
 /// # }
+/// #
 /// f!(1, b = 2, c = 3); // OK
 /// ```
 ///
-/// ```compile_fails
+/// ```compile_fail
 /// # use opt_args::*;
 /// #
 /// # #[opt_args_ord(c, b)]
 /// # fn f(a: i32, b: i32, c: i32) -> (i32, i32, i32) {
 /// #     (a, b, c)
 /// # }
+/// #
 /// f!(1, c = 3, b = 2); // WRONG: arguments not in the same order of the original function
 /// ```
 ///
@@ -253,27 +289,27 @@ fn internal(
     result.into()
 }
 
-// #[proc_macro_attribute]
-// fn proc_args_to_be_decided(attr: TokenStream, item: TokenStream) -> TokenStream {
-//     let opt_args = syn::parse_macro_input!(attr as OptArgs);
-//     let input = syn::parse_macro_input!(item as OptArgsItem);
-//     let result = quote! {
-//         #input
-//
-//         use quote::quote;
-//         use opt_args::parser::{OptArgs, OptArgsItem};
-//         use proc_macro::TokenStream;
-//         #[proc_macro_attribute]fn proc_args_to_be_decided(attr: TokenStream, item: TokenStream) -> TokenStream {
-//     let opt_args = syn::parse_macro_input!(attr as OptArgs);
-//     let input = syn::parse_macro_input!(item as OptArgsItem);
-//     let result = quote! {
-//         #input
-//
-//         #[proc_macro_attribute]
-//
-//     };
-//     result.into()
-// }
-//     };
-//     result.into()
-// }
+/*#[proc_macro_attribute]
+pub fn proc_args_to_be_decided(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let opt_args = syn::parse_macro_input!(attr as OptArgs);
+    let input = syn::parse_macro_input!(item as OptArgsItem);
+    let result = quote! {
+        #input
+
+        use quote::quote;
+        use opt_args::parser::{OptArgs, OptArgsItem};
+        use proc_macro::TokenStream;
+        #[proc_macro_attribute]fn proc_args_to_be_decided(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let opt_args = syn::parse_macro_input!(attr as OptArgs);
+    let input = syn::parse_macro_input!(item as OptArgsItem);
+    let result = quote! {
+        #input
+
+        #[proc_macro_attribute]
+
+    };
+    result.into()
+}
+    };
+    result.into()
+}*/

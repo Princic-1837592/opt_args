@@ -42,9 +42,6 @@ pub fn get_combinations(args: Vec<String>, combination_type: CombinationType) ->
 /// creates couples (pattern, branch) where:
 /// pattern is a pattern of the final macro
 /// branch is the code that will substitute the macro call
-/// **Parameters**:
-/// - name: name of the item
-/// - args: vector of names of arguments/fields of the item
 pub fn macro_branches(
     name: &str,
     combinations: Vec<Vec<String>>,
