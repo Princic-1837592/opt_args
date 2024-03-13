@@ -9,7 +9,8 @@
 //! on the outside, the macro will be visible but the code won't compile.
 //!
 //! Please read the description of each macro before using them!
-use proc_macro::TokenStream;
+use proc_macro::TokenStream as TokenStream1;
+use proc_macro2::TokenStream;
 use std::collections::HashMap;
 
 use itertools::Itertools;
@@ -161,58 +162,15 @@ mod parser;
 /// ```
 /// it will raise a compile time error: the trait `Default` is not implemented for `&Vec<String>`
 #[proc_macro_attribute]
-pub fn opt_args(attr: TokenStream, item: TokenStream) -> TokenStream {
-    internal(attr, item, CombinationType::Unordered)
-}
-
-/// Same as [`macro@opt_args`], but the generated macro
-/// must be called with arguments in the right order.
-///
-/// You can still pass arguments to [`macro@opt_args_ord`] in any order:
-/// ```
-/// # use opt_args::*;
-/// #
-/// #[opt_args_ord(c, b)]
-/// fn f(a: i32, b: i32, c: i32) -> (i32, i32, i32) {
-///     (a, b, c)
-/// }
-/// ```
-///
-/// And use them in the same order as they are in the function
-/// ```
-/// # use opt_args::*;
-/// #
-/// # #[opt_args_ord(c, b)]
-/// # fn f(a: i32, b: i32, c: i32) -> (i32, i32, i32) {
-/// #     (a, b, c)
-/// # }
-/// #
-/// f!(1, b = 2, c = 3); // OK
-/// ```
-///
-/// ```compile_fail
-/// # use opt_args::*;
-/// #
-/// # #[opt_args_ord(c, b)]
-/// # fn f(a: i32, b: i32, c: i32) -> (i32, i32, i32) {
-/// #     (a, b, c)
-/// # }
-/// #
-/// f!(1, c = 3, b = 2); // WRONG: arguments not in the same order of the original function
-/// ```
-///
-/// This macro is useful to make the compilation faster in the case of functions with more
-/// than 5 optional arguments.
-#[proc_macro_attribute]
-pub fn opt_args_ord(attr: TokenStream, item: TokenStream) -> TokenStream {
-    internal(attr, item, CombinationType::Ordered)
+pub fn opt_args(attr: TokenStream1, item: TokenStream1) -> TokenStream1 {
+    internal(attr, item, CombinationType::Unordered).unwrap_or_else(|e|e.to_compile_error()).into()
 }
 
 fn internal(
-    attr: TokenStream,
-    item: TokenStream,
+    attr: TokenStream1,
+    item: TokenStream1,
     combination_type: CombinationType,
-) -> TokenStream {
+) -> syn::Result<TokenStream> {
     // parse attr and item
     let opt_args = syn::parse_macro_input!(attr as OptArgs);
     let input = syn::parse_macro_input!(item as OptArgsItem);
@@ -288,28 +246,3 @@ fn internal(
     };
     result.into()
 }
-
-/*#[proc_macro_attribute]
-pub fn proc_args_to_be_decided(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let opt_args = syn::parse_macro_input!(attr as OptArgs);
-    let input = syn::parse_macro_input!(item as OptArgsItem);
-    let result = quote! {
-        #input
-
-        use quote::quote;
-        use opt_args::parser::{OptArgs, OptArgsItem};
-        use proc_macro::TokenStream;
-        #[proc_macro_attribute]fn proc_args_to_be_decided(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let opt_args = syn::parse_macro_input!(attr as OptArgs);
-    let input = syn::parse_macro_input!(item as OptArgsItem);
-    let result = quote! {
-        #input
-
-        #[proc_macro_attribute]
-
-    };
-    result.into()
-}
-    };
-    result.into()
-}*/
