@@ -3,7 +3,7 @@ use opt_args::opt_args;
 #[test]
 fn one_opt_arg() {
     opt_args! {
-        #[non_export]
+        #[opt_args(non_export)]
         fn one_opt_arg(a: i32, b: u8?) -> (i32, u8) {
             (a, b)
         }
@@ -16,8 +16,7 @@ fn one_opt_arg() {
 #[test]
 fn all_opt_arg() {
     opt_args! {
-        #[shuffle]
-        #[non_export]
+        #[opt_args(shuffle, non_export)]
         fn all_opt_arg_internal(a: i32?, b: u8?) -> (i32, u8) {
             (a, b)
         }
@@ -33,7 +32,7 @@ fn all_opt_arg() {
 #[test]
 fn recursive() {
     opt_args! {
-        #[non_export]
+        #[opt_args(non_export)]
         fn factorial(n: u64 = 5) -> u64 {
             if n <= 1 {
                 1
@@ -50,7 +49,7 @@ fn recursive() {
 #[allow(clippy::type_complexity)]
 fn complex_types() {
     opt_args! {
-        #[non_export]
+        #[opt_args(non_export)]
         fn complex_types<'a, 'b, 'c, T: 'c>(
             a: i32?,
             b: &'a str = "default",
@@ -76,8 +75,7 @@ fn complex_types() {
 #[test]
 fn generics_and_type_inference() {
     opt_args! {
-        #[shuffle]
-        #[non_export]
+        #[opt_args(shuffle, non_export)]
         fn type_inference<A, B>(a: A?, b: B?) -> (A, B) {
             (a, b)
         }
@@ -110,7 +108,7 @@ fn generics_and_type_inference() {
 #[test]
 fn ordered() {
     opt_args! {
-        #[non_export]
+        #[opt_args(non_export)]
         fn ordered_internal(a: i32, b: i32?, c: i32?) -> (i32, i32, i32) {
             (a, b, c)
         }

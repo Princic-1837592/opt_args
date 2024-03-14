@@ -11,13 +11,13 @@
 //! Please read the description of each macro before using them!
 
 use proc_macro::TokenStream as TokenStream1;
-use proc_macro2::{Ident, TokenStream};
+use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, spanned::Spanned, Attribute, Error, Meta};
+use syn::{parse_macro_input, spanned::Spanned, Error};
 
 use crate::{
     functions::{compute_combinations, macro_branches},
-    parser::{GenericOptArg, OptArgsItem, OptArgsItemType},
+    parser::{GenericOptArg, OptArgsAttributes, OptArgsItem, OptArgsItemType},
 };
 
 mod functions;
@@ -177,8 +177,14 @@ fn internal(mut opt_args_item: OptArgsItem) -> syn::Result<TokenStream> {
         ..
     } = &mut opt_args_item;
     let ident = item.ident().clone();
-    let shuffle = find_and_remove(attrs, "shuffle");
-    let macro_export = (!find_and_remove(attrs, "non_export")).then_some(quote!(#[macro_export]));
+    let parsed_attrs: OptArgsAttributes = deluxe::extract_attributes(attrs)?;
+    let shuffle = parsed_attrs.shuffle.is_some();
+    let macro_export = (parsed_attrs.non_export.is_none()).then_some(quote!(#[macro_export]));
+    let macro_ident = if let Some(ident) = parsed_attrs.rename {
+        ident
+    } else {
+        item.ident().clone()
+    };
 
     // convert the list of attributes in a list of generic required/optional arguments
     let mut args: Vec<_> = match item {
@@ -235,24 +241,10 @@ fn internal(mut opt_args_item: OptArgsItem) -> syn::Result<TokenStream> {
     Ok(quote!(
         #macro_export
         #[allow(non_snake_case, unused)]
-        macro_rules! #ident {
+        macro_rules! #macro_ident {
             #(#macro_branches);*
         }
 
         #opt_args_item
     ))
-}
-
-fn find_and_remove(attrs: &mut Vec<Attribute>, attr: &str) -> bool {
-    if let Some(i) = attrs.iter().position(|Attribute { meta, .. }| match meta {
-        Meta::Path(syn::Path { segments, .. }) => syn::parse::<Ident>(quote!(#segments).into())
-            .map(|ident| ident == attr)
-            .unwrap_or_default(),
-        _ => false,
-    }) {
-        attrs.remove(i);
-        true
-    } else {
-        false
-    }
 }

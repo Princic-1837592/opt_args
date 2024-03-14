@@ -3,8 +3,7 @@ use opt_args::opt_args;
 #[test]
 fn opt_struct() {
     opt_args! {
-        #[shuffle]
-        #[non_export]
+        #[opt_args(shuffle,non_export)]
         #[derive(Default, Debug, PartialEq)]
         struct Opt<'a, 'b, T: 'b> {
             a: i32,

@@ -1,3 +1,4 @@
+use deluxe::ExtractAttributes;
 use derive_syn_parse::Parse;
 use proc_macro2::{Ident, Span};
 use syn::{
@@ -146,4 +147,12 @@ impl From<OptArgsItemStructFields> for GenericOptArg {
             default: matches!(arg.default, Some(Some(_))),
         }
     }
+}
+
+#[derive(ExtractAttributes, Debug)]
+#[deluxe(attributes(opt_args))]
+pub(crate) struct OptArgsAttributes {
+    pub shuffle: Option<()>,
+    pub non_export: Option<()>,
+    pub rename: Option<Ident>,
 }
