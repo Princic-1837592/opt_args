@@ -9,19 +9,20 @@
 //! on the outside, the macro will be visible but the code won't compile.
 //!
 //! Please read the description of each macro before using them!
+
 use proc_macro::TokenStream as TokenStream1;
-use proc_macro2::TokenStream;
-use std::collections::HashMap;
-
-use itertools::Itertools;
+use proc_macro2::{Ident, TokenStream};
 use quote::quote;
-use syn::Item;
+use syn::{parse_macro_input, spanned::Spanned, Attribute, Error, Meta};
 
-use crate::functions::{fn_arg_to_name, get_combinations, macro_branches, CombinationType};
-use crate::parser::{OptArgs, OptArgsItem};
+use crate::{
+    functions::{compute_combinations, macro_branches},
+    parser::{GenericOptArg, OptArgsItem, OptArgsItemType},
+};
 
 mod functions;
 mod parser;
+mod tokens;
 
 /// Apply to a function or struct to generate a macro that can be called with named optional arguments.
 ///
@@ -161,88 +162,94 @@ mod parser;
 /// assert_eq!(f!(), Vec::new());
 /// ```
 /// it will raise a compile time error: the trait `Default` is not implemented for `&Vec<String>`
-#[proc_macro_attribute]
-pub fn opt_args(attr: TokenStream1, item: TokenStream1) -> TokenStream1 {
-    internal(attr, item, CombinationType::Unordered).unwrap_or_else(|e|e.to_compile_error()).into()
+#[proc_macro]
+pub fn opt_args(item: TokenStream1) -> TokenStream1 {
+    let item = parse_macro_input!(item as OptArgsItem);
+    internal(item)
+        .unwrap_or_else(|e| e.to_compile_error())
+        .into()
 }
 
-fn internal(
-    attr: TokenStream1,
-    item: TokenStream1,
-    combination_type: CombinationType,
-) -> syn::Result<TokenStream> {
-    // parse attr and item
-    let opt_args = syn::parse_macro_input!(attr as OptArgs);
-    let input = syn::parse_macro_input!(item as OptArgsItem);
-
-    // compute name, args and type of the given item
-    let (name, args, is_function) = match &input {
-        OptArgsItem::Function(input) => {
-            let name: String = input.sig.ident.to_string();
-            let args: Vec<String> = input.sig.inputs.iter().map(fn_arg_to_name).collect();
-            (name, args, true)
-        }
-        OptArgsItem::Struct(input) => {
-            let name: String = input.ident.to_string();
-            let args: Vec<String> = input
-                .fields
-                .iter()
-                .map(|f| f.ident.as_ref().unwrap().to_string())
-                .collect();
-            (name, args, false)
-        }
+fn internal(mut opt_args_item: OptArgsItem) -> syn::Result<TokenStream> {
+    let OptArgsItem {
+        ref mut attrs,
+        item,
+        ..
+    } = &mut opt_args_item;
+    // take ownership of ident
+    let ident = item.ident().clone();
+    // check if #[shuffle] is present
+    let shuffle = if let Some(i) = attrs.iter().position(|Attribute { meta, .. }| match meta {
+        Meta::Path(syn::Path { segments, .. }) => syn::parse::<Ident>(quote!(#segments).into())
+            .map(|ident| ident == "shuffle")
+            .unwrap_or_default(),
+        _ => false,
+    }) {
+        // If present, remove it from the attributes
+        attrs.remove(i);
+        true
+    } else {
+        false
     };
 
-    // validity checks
-    let required_args_num = args
-        .len()
-        .checked_sub(opt_args.attrs.len())
-        .expect("Too many optionals");
-    assert!(
-        required_args_num < args.len(),
-        "The number of optional arguments must be lower than the total number of arguments"
-    );
-    let args_indexes: HashMap<String, usize> = args
-        .iter()
-        .enumerate()
-        .map(|(i, a)| (a.clone(), i))
-        .collect();
-    assert!(
-        opt_args
-            .iter()
-            .all(|a| args_indexes[&a.name] >= required_args_num),
-        "All the arguments after the first optional must be optional"
+    // convert the list of attributes in a list of generic required/optional arguments
+    let mut args: Vec<_> = match item {
+        OptArgsItemType::ItemFn(item_fn) => item_fn
+            .inputs
+            .clone()
+            .into_iter()
+            .map(GenericOptArg::from)
+            .collect(),
+        OptArgsItemType::ItemStruct(item_struct) => item_struct
+            .fields
+            .clone()
+            .into_iter()
+            .map(GenericOptArg::from)
+            .collect(),
+    };
+    let mut opt_args = vec![];
+    let mut first_optional = args.len();
+    for (a, mut arg) in args.clone().into_iter().enumerate() {
+        // check that all optional arguments are declared after the last non-optional argument
+        if !arg.is_optional() {
+            if !opt_args.is_empty() {
+                return Err(Error::new(
+                    arg.ident.span().join(arg.ty.span()).unwrap(),
+                    "Non-default arguments should come before default arguments",
+                ));
+            }
+        } else {
+            // if the argument doesn't have an explicit default value, use `Default::default()`
+            // (this is not a constraint on the actual type to be implement `Default`,
+            // but will only be used in the case of a macro invocation without an explicit value)
+            if arg.default {
+                arg.value =
+                    Some(syn::parse(quote!(::std::default::Default::default()).into()).unwrap());
+            }
+            opt_args.push(arg);
+            if first_optional == args.len() {
+                first_optional = a;
+            }
+        }
+    }
+    // removes all optional arguments from the original array
+    args.truncate(first_optional);
+
+    let combinations = compute_combinations(&opt_args, shuffle);
+    let macro_branches = macro_branches(
+        &ident,
+        combinations,
+        &opt_args,
+        &args,
+        matches!(item, OptArgsItemType::ItemFn(_)),
     );
 
-    // convert OptArgs struct into pairs of (arg, default_value)
-    let opt_args = opt_args
-        .iter()
-        .map(|a| (a.name.clone(), a.value.clone()))
-        .sorted_by_key(|t| args_indexes[&t.0])
-        .collect::<Vec<_>>();
-    let required_args: Vec<String> = args.iter().take(required_args_num).cloned().collect();
-    let combinations = get_combinations(
-        opt_args.iter().map(|t| &t.0).cloned().collect(),
-        combination_type,
-    );
-
-    // compute macro branches
-    let macro_branches = macro_branches(&name, combinations, opt_args, required_args, is_function);
-
-    // build result body
-    let macro_body = macro_branches
-        .iter()
-        .map(|(p, b)| format!("({}) => {{{}}}", p, b))
-        .join(";");
-    let macro_token: Item = syn::parse_str(&format!(
-        "#[macro_export]macro_rules! {} {{{}}}",
-        name, macro_body
+    Ok(quote!(
+        #opt_args_item
+        #[macro_export]
+        #[allow(non_snake_case, unused)]
+        macro_rules! #ident {
+            #(#macro_branches);*
+        }
     ))
-    .unwrap();
-    let result = quote! {
-        #macro_token
-
-        #input
-    };
-    result.into()
 }

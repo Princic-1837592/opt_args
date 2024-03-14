@@ -1,112 +1,99 @@
 use itertools::Itertools;
-use syn::{FnArg, Pat};
+use proc_macro2::{Ident, TokenStream};
+use quote::quote;
+use syn::Expr;
 
-///converts a single FnArg object into a string representing its ident
-pub fn fn_arg_to_name(arg: &FnArg) -> String {
-    match arg {
-        FnArg::Typed(pat_type) => {
-            if let Pat::Ident(pat_ident) = &*pat_type.pat {
-                return pat_ident.ident.to_string();
-            }
-            panic!("If you can read this, please open a PR");
-        }
-        _ => panic!("If you can read this, please open a PR"),
-    }
-}
+use crate::parser::GenericOptArg;
 
-pub enum CombinationType {
-    Unordered,
-    Ordered,
-}
-
-/// returns the vector of all combinations for optional arguments
-pub fn get_combinations(args: Vec<String>, combination_type: CombinationType) -> Vec<Vec<String>> {
+pub(crate) fn compute_combinations(opt_args: &[GenericOptArg], shuffle: bool) -> Vec<Vec<&Ident>> {
     let mut result = vec![];
-    for i in 0..=args.len() {
-        result.extend(match combination_type {
-            CombinationType::Unordered => args
+    for i in 0..=opt_args.len() {
+        result.extend(if shuffle {
+            opt_args
                 .iter()
                 .permutations(i)
-                .map(|permutation| permutation.iter().map(ToString::to_string).collect())
-                .collect::<Vec<_>>(),
-            CombinationType::Ordered => args
+                .map(|permutation| permutation.iter().map(|a| &a.ident).collect())
+                .collect::<Vec<_>>()
+        } else {
+            opt_args
                 .iter()
                 .combinations(i)
-                .map(|combination| combination.iter().map(ToString::to_string).collect())
-                .collect::<Vec<_>>(),
+                .map(|combination| combination.iter().map(|a| &a.ident).collect())
+                .collect::<Vec<_>>()
         })
     }
     result
 }
 
-/// creates couples (pattern, branch) where:
-/// pattern is a pattern of the final macro
-/// branch is the code that will substitute the macro call
-pub fn macro_branches(
-    name: &str,
-    combinations: Vec<Vec<String>>,
-    opt_args: Vec<(String, String)>,
-    required_args: Vec<String>,
+pub(crate) fn macro_branches(
+    name: &Ident,
+    combinations: Vec<Vec<&Ident>>,
+    opt_args: &[GenericOptArg],
+    required_args: &[GenericOptArg],
     is_function: bool,
-) -> Vec<(String, String)> {
-    // build formatters
+) -> Vec<TokenStream> {
     let required_args_formatter = if is_function {
-        |a: &String| format!("${}", a)
+        |GenericOptArg { ident, .. }: &GenericOptArg| quote!($#ident)
     } else {
-        |a: &String| format!("{}: ${}", a, a)
+        |GenericOptArg { ident, .. }: &GenericOptArg| quote!(#ident: $#ident)
     };
     let opt_args_formatter = if is_function {
-        |a: &String, v: &String, c: &Vec<String>| {
-            if c.contains(a) {
-                format!("${}", a)
+        |a: &Ident, v: &Expr, c: &Vec<&Ident>| {
+            if c.contains(&a) {
+                quote!($#a)
             } else {
-                v.to_string()
+                quote!(#v)
             }
         }
     } else {
-        |a: &String, v: &String, c: &Vec<String>| {
-            if c.contains(a) {
-                format!("{}: ${}", a, a)
+        |a: &Ident, v: &Expr, c: &Vec<&Ident>| {
+            if c.contains(&a) {
+                quote!(#a: $#a)
             } else {
-                format!("{}: {}", a, v)
+                quote!(#a: #v)
             }
         }
     };
 
-    let required_args_pattern = required_args
+    let tmp = required_args
         .iter()
-        .map(|a| format!("${}:expr", a))
-        .join(",");
-    let mut opt_args_pattern: String;
-    let required_args_branch = required_args.iter().map(required_args_formatter).join(",");
-    let mut opt_args_branch: String;
-    let mut result: Vec<(String, String)> = vec![];
+        .map(|GenericOptArg { ident, .. }| quote!($#ident:expr));
+    let required_args_pattern = quote!(#(#tmp),*);
+
+    let tmp = required_args.iter().map(required_args_formatter);
+    let required_args_branch = quote!(#(#tmp),*);
+    let mut result: Vec<TokenStream> = vec![];
 
     for combination in combinations {
-        opt_args_pattern = combination
-            .iter()
-            .map(|a| format!("{} = ${}:expr", a, a))
-            .join(",");
-        let pattern = vec![&required_args_pattern, &opt_args_pattern]
-            .iter()
-            .filter(|e| !e.is_empty())
-            .join(",");
-        opt_args_branch = opt_args
-            .iter()
-            .map(|(a, v)| opt_args_formatter(a, v, &combination))
-            .join(",");
-        let branch = vec![&required_args_branch, &opt_args_branch]
-            .iter()
-            .filter(|e| !e.is_empty())
-            .join(",");
-        result.push((
-            pattern,
-            if is_function {
-                format!("{}({})", name, branch)
-            } else {
-                format!("{}{{{}}}", name, branch)
-            },
-        ));
+        let tmp = combination.iter().map(|a| quote!(#a = $#a:expr));
+        let opt_args_pattern = quote!(#(#tmp),*);
+        let tmp = [&required_args_pattern, &opt_args_pattern];
+        let tmp = tmp.iter().filter(|e| !e.is_empty());
+        let pattern = quote!(#(#tmp),*);
+        let tmp = opt_args.iter().map(|GenericOptArg { ident, value, .. }| {
+            opt_args_formatter(ident, value.as_ref().unwrap(), &combination)
+        });
+        let opt_args_branch = quote!(#(#tmp),*);
+        let tmp = [&required_args_branch, &opt_args_branch];
+        let tmp = tmp.iter().filter(|e| !e.is_empty());
+        let branch = quote!(#(#tmp),*);
+        let body = if is_function {
+            quote!(#name (#branch))
+        } else {
+            quote!(#name { #branch })
+        };
+        result.push(quote!((#pattern) => {#body}));
     }
+
+    // fallback branch for wrong order or wrong names
+    result.push(quote!(
+        ($($tt:tt)*) => {
+            panic!(
+                "Unrecognized order or name for arguments: `{}`.\
+                If you want to pass named parameters in any order, use the attribute #[shuffle]",
+                stringify!($($tt)*)
+            )
+        }
+    ));
     result
 }
