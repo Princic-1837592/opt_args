@@ -1,38 +1,45 @@
-use opt_args::{opt_args, opt_args_ord};
+use opt_args::opt_args;
 
 #[test]
 fn one_opt_arg() {
-    #[opt_args(b)]
-    fn one_opt_arg_internal(a: i32, b: u8) -> (i32, u8) {
-        (a, b)
+    opt_args! {
+        #[non_export]
+        fn one_opt_arg(a: i32, b: u8?) -> (i32, u8) {
+            (a, b)
+        }
     }
 
-    assert_eq!(one_opt_arg_internal!(1), (1, 0));
-    assert_eq!(one_opt_arg_internal!(1, b = 42), (1, 42));
+    assert_eq!(one_opt_arg!(1), (1, 0));
+    assert_eq!(one_opt_arg!(1, b = 42), (1, 42));
 }
 
 #[test]
 fn all_opt_arg() {
-    #[opt_args(a, b)]
-    fn all_opt_arg_internal(a: i32, b: u8) -> (i32, u8) {
-        (a, b)
+    opt_args! {
+        #[shuffle]
+        #[non_export]
+        fn all_opt_arg_internal(a: i32?, b: u8?) -> (i32, u8) {
+            (a, b)
+        }
     }
 
     assert_eq!(all_opt_arg_internal!(), (0, 0));
     assert_eq!(all_opt_arg_internal!(a = 1), (1, 0));
     assert_eq!(all_opt_arg_internal!(b = 1), (0, 1));
-    //call with arguments in different order
+    // call with arguments in different order
     assert_eq!(all_opt_arg_internal!(b = 1, a = 1), (1, 1));
 }
 
 #[test]
 fn recursive() {
-    #[opt_args(n = 5)]
-    fn factorial(n: u64) -> u64 {
-        if n <= 1 {
-            1
-        } else {
-            factorial!(n = n - 1) * n
+    opt_args! {
+        #[non_export]
+        fn factorial(n: u64 = 5) -> u64 {
+            if n <= 1 {
+                1
+            } else {
+                factorial!(n = n - 1) * n
+            }
         }
     }
 
@@ -40,34 +47,43 @@ fn recursive() {
 }
 
 #[test]
-fn many_types() {
-    #[opt_args_ord(a, b = "default", c, d, e)]
-    fn many_types_internal<'a, 'b>(
-        a: i32,
-        b: &'a str,
-        c: (u128, f32),
-        d: Option<[String; 4]>,
-        e: &'b str,
-    ) -> (i32, &'a str, (u128, f32), Option<[String; 4]>, &'b str) {
-        (a, b, c, d, e)
+#[allow(clippy::type_complexity)]
+fn complex_types() {
+    opt_args! {
+        #[non_export]
+        fn complex_types<'a, 'b, 'c, T: 'c>(
+            a: i32?,
+            b: &'a str = "default",
+            c: (u128, f32)?,
+            d: Option<[String; 4]>?,
+            e: &'b str?,
+            f: Vec<T>?,
+        ) -> (i32, &'a str, (u128, f32), Option<[String; 4]>, &'b str, Vec<T>) {
+            (a, b, c, d, e, f)
+        }
     }
 
-    assert_eq!(many_types_internal!(), (0, "default", (0, 0.0), None, ""));
     assert_eq!(
-        many_types_internal!(e = "e"),
-        (0, "default", (0, 0.0), None, "e")
+        complex_types!(),
+        (0, "default", (0, 0.0), None, "", Vec::<u8>::new())
+    );
+    assert_eq!(
+        complex_types!(e = "e", f = vec![9]),
+        (0, "default", (0, 0.0), None, "e", vec![9])
     );
 }
 
 #[test]
-fn generics() {
-    #[opt_args(a, b)]
-    fn generics_internal<A, B>(a: A, b: B) -> (A, B) {
-        (a, b)
+fn generics_and_type_inference() {
+    opt_args! {
+        #[shuffle]
+        #[non_export]
+        fn type_inference<A, B>(a: A?, b: B?) -> (A, B) {
+            (a, b)
+        }
     }
 
-    //macros can infer the type to return
-    let result: (i32, f64) = generics_internal!();
+    let result: (i32, f64) = type_inference!();
     assert_eq!(result, (0, 0.0));
 
     #[derive(Default, PartialEq, Debug)]
@@ -77,7 +93,7 @@ fn generics() {
         c: String,
     }
 
-    let result: (X, &str) = generics_internal!();
+    let result: (X, &str) = type_inference!();
     assert_eq!(
         result,
         (
@@ -93,9 +109,11 @@ fn generics() {
 
 #[test]
 fn ordered() {
-    #[opt_args_ord(c, b)]
-    fn ordered_internal(a: i32, b: i32, c: i32) -> (i32, i32, i32) {
-        (a, b, c)
+    opt_args! {
+        #[non_export]
+        fn ordered_internal(a: i32, b: i32?, c: i32?) -> (i32, i32, i32) {
+            (a, b, c)
+        }
     }
 
     let mut result = ordered_internal!(1);
@@ -107,6 +125,19 @@ fn ordered() {
     result = ordered_internal!(1, c = 1);
     assert_eq!(result, (1, 0, 1));
 
-    // result = ordered_internal!(1, b = 1, c = 1);
-    // assert_eq!(result, (1, 1, 1));
+    result = ordered_internal!(1, b = 1, c = 1);
+    assert_eq!(result, (1, 1, 1));
 }
+
+/*#[test]
+#[should_panic]
+fn wrong_order() {
+    opt_args! {
+        #[non_export]
+        fn ordered_internal(a: i32?, b: i32?) -> (i32, i32) {
+            (a, b)
+        }
+    }
+
+    ordered_internal!(b = 1, a = 1);
+}*/

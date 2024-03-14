@@ -2,45 +2,56 @@ use opt_args::opt_args;
 
 #[test]
 fn opt_struct() {
-    #[derive(Default, Debug, PartialEq)]
-    #[opt_args(b = "b", c = "c", d)]
-    struct Opt<'a> {
-        a: i32,
-        b: &'a str,
-        c: &'a str,
-        d: &'a str,
+    opt_args! {
+        #[shuffle]
+        #[non_export]
+        #[derive(Default, Debug, PartialEq)]
+        struct Opt<'a, 'b, T: 'b> {
+            a: i32,
+            b: &'a str = "b",
+            c: &'b str = "c",
+            d: T?,
+        }
     }
 
-    let result = Opt!(4);
+    let result: Opt<'_, '_, Vec<u8>> = Opt! {4};
     assert_eq!(
         result,
         Opt {
             a: 4,
             b: "b",
             c: "c",
-            d: ""
+            d: vec![],
         }
     );
 
-    let result = Opt!(4, c = "not default");
+    let result = Opt! {
+        4,
+        c = "not default",
+        d = vec!["type inference Vec<&str>"]
+    };
     assert_eq!(
         result,
         Opt {
             a: 4,
             b: "b",
             c: "not default",
-            d: ""
+            d: vec!["type inference Vec<&str>"],
         }
     );
 
-    let result = Opt!(4, b = "c", d = "not default");
+    let result = Opt! {
+        4,
+        b = "c",
+        d = 1
+    };
     assert_eq!(
         result,
         Opt {
             a: 4,
             b: "c",
             c: "c",
-            d: "not default"
+            d: 1,
         }
     );
 }
