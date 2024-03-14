@@ -128,16 +128,3 @@ fn ordered() {
     result = ordered_internal!(1, b = 1, c = 1);
     assert_eq!(result, (1, 1, 1));
 }
-
-/*#[test]
-#[should_panic]
-fn wrong_order() {
-    opt_args! {
-        #[non_export]
-        fn ordered_internal(a: i32?, b: i32?) -> (i32, i32) {
-            (a, b)
-        }
-    }
-
-    ordered_internal!(b = 1, a = 1);
-}*/
