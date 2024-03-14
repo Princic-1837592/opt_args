@@ -176,21 +176,9 @@ fn internal(mut opt_args_item: OptArgsItem) -> syn::Result<TokenStream> {
         item,
         ..
     } = &mut opt_args_item;
-    // take ownership of ident
     let ident = item.ident().clone();
-    // check if #[shuffle] is present
-    let shuffle = if let Some(i) = attrs.iter().position(|Attribute { meta, .. }| match meta {
-        Meta::Path(syn::Path { segments, .. }) => syn::parse::<Ident>(quote!(#segments).into())
-            .map(|ident| ident == "shuffle")
-            .unwrap_or_default(),
-        _ => false,
-    }) {
-        // If present, remove it from the attributes
-        attrs.remove(i);
-        true
-    } else {
-        false
-    };
+    let shuffle = find_and_remove(attrs, "shuffle");
+    let macro_export = (!find_and_remove(attrs, "non_export")).then_some(quote!(#[macro_export]));
 
     // convert the list of attributes in a list of generic required/optional arguments
     let mut args: Vec<_> = match item {
@@ -245,11 +233,26 @@ fn internal(mut opt_args_item: OptArgsItem) -> syn::Result<TokenStream> {
     );
 
     Ok(quote!(
-        #opt_args_item
-        #[macro_export]
+        #macro_export
         #[allow(non_snake_case, unused)]
         macro_rules! #ident {
             #(#macro_branches);*
         }
+
+        #opt_args_item
     ))
+}
+
+fn find_and_remove(attrs: &mut Vec<Attribute>, attr: &str) -> bool {
+    if let Some(i) = attrs.iter().position(|Attribute { meta, .. }| match meta {
+        Meta::Path(syn::Path { segments, .. }) => syn::parse::<Ident>(quote!(#segments).into())
+            .map(|ident| ident == attr)
+            .unwrap_or_default(),
+        _ => false,
+    }) {
+        attrs.remove(i);
+        true
+    } else {
+        false
+    }
 }
