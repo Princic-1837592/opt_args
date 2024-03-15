@@ -4,7 +4,7 @@
 //! without having to specify all of their arguments.
 //! Wrap the attribute around a function or struct to generate a macro that can be called with named optional arguments.
 //!
-//! ## Using the macro
+//! # Using the macro
 //! To use the macro, just wrap the target item (function or struct) inside the macro body.
 //! Here, you can use a special syntax that lets you easily mark arguments as optional and,
 //! additionally, indicate their default value. To mark an argument as optional, put a `?` after the type.
@@ -39,7 +39,7 @@
 //! The example above is not valid since argument `c` is not optional,
 //! but it comes after `b` which is optional. In this case the macro will result in a compile error.
 //!
-//! ## Calling the function
+//! # Calling the function
 //! To call the function, simply use the name of the function as a macro and pass first the
 //! positional required arguments, then the named optional arguments, like in the following:
 //! ```
@@ -56,6 +56,7 @@
 //! ```
 //! In this case we would have `b = 0`, since no default value was provided for `b`.
 //!
+//! # Options
 //! ## Order of optionals
 //! By default, named arguments must be passed in the same order as they are declared in the item.
 //! The following example fails because `a = 1` is passed after `c = 3`,
@@ -72,7 +73,7 @@
 //! let result = f!(c = 3, a = 1);
 //! assert_eq!(result, 1 + 0 + 3);
 //! ```
-//! This behavior can be changed with the `#[shuffle]` attribute. This attribute allows to call the
+//! This behavior can be changed with the `shuffle` attribute. This attribute allows to call the
 //! function with arbitrary order of named arguments:
 //! ```
 //! # use opt_args::*;
@@ -89,13 +90,79 @@
 //! ```
 //! <span style="color:red">**IMPORTANT**</span>: this doesn't come without disadvantage:
 //! to obtain this result, [`macro@opt_args`] creates a macro that matches any possible
-//! permutation the of given optional arguments. When applying the `#[shuffle]` attribute,
+//! permutation the of given optional arguments. When applying the `shuffle` attribute,
 //! the number of possible permutations scales in the order of `n!`, where `n` is the number of
 //! optional arguments.
 //! While macro expansion has no impact on runtime, it may impact compile time
 //! with a great number of optionals.
 //!
-//! ## Recursion
+//! ## Export the macro
+//! By default, the generated macro is annotated with `#[macro_export]` to make it possible to
+//! import it from outside. To change this behavior, use the `non_export` attribute:
+//! ```compile_fail
+//! mod macros {
+//!     # use opt_args::*;
+//!     #
+//!     opt_args! {
+//!         #[opt_args(shuffle, non_export)]
+//!         pub fn f(a: u8?, b: u8?) -> u8 {
+//!             a + b
+//!         }
+//!      }
+//! }
+//! use macros::f;
+//! f!();
+//! ```
+//! ```
+//! mod macros {
+//!     # use opt_args::*;
+//!     #
+//!     opt_args! {
+//!         #[opt_args(shuffle)]
+//!         pub fn f(a: u8?, b: u8?) -> u8 {
+//!             a + b
+//!         }
+//!      }
+//! }
+//! use macros::f;
+//! f!();
+//! ```
+//! Of course for the macro to work outside the original module, it's needed that the original item
+//! is available in the same scope where the macro is used:
+//! ```compile_fail
+//! mod macros {
+//!     # use opt_args::*;
+//!     #
+//!     opt_args! {
+//!         #[opt_args(shuffle)]
+//!         fn f(a: u8?, b: u8?) -> u8 {
+//!             a + b
+//!         }
+//!      }
+//! }
+//! use macros::f;
+//! f!();
+//! ```
+//! In the above example the function macro `macros::f` is reachable, but the function `macros::f`
+//! is not.
+//!
+//! ## Rename the macro
+//! It's also possible to give the generated macro a different name than the original item:
+//! ```
+//! # use opt_args::*;
+//! #
+//! opt_args! {
+//!     #[opt_args(rename = f_macro)]
+//!     fn f(a: u8, b: u8 = 5, c: u8?) -> u8 {
+//!         a + b + c
+//!     }
+//! }
+//!
+//! let result = f_macro!(1);
+//! assert_eq!(result, f(1, 5, 0));
+//! ```
+//!
+//! # Recursion
 //! It's also possible to use the generated macro inside the original function:
 //! ```
 //! # use opt_args::*;
@@ -114,7 +181,7 @@
 //! assert_eq!(result, 13);
 //! ```
 //!
-//! ## Generics and lifetimes
+//! # Generics and lifetimes
 //! The macro supports any kind of generic types, lifetimes and type inference:
 //! ```
 //! # use opt_args::*;
@@ -142,7 +209,7 @@
 //! );
 //! ```
 //!
-//! ## Types that don't implement Default
+//! # Types that don't implement Default
 //! It's possible to use the macro to mark as optional even a type that doesn't implement `Default`.
 //! ```
 //! # use opt_args::*;
@@ -181,7 +248,7 @@
 //! This may appear useless at first, but it may be useful to force the caller to pass the argument
 //! `b` as a named argument.
 //!
-//! ## Structs
+//! # Structs
 //! The syntax and usage of the macro for structs is the same as it is for functions:
 //! ```
 //! # use opt_args::*;
@@ -207,38 +274,6 @@
 //!         d: vec![],
 //!     }
 //! );
-//! ```
-//!
-//! ## Export the macro
-//! By default, the generated macro is annotated with `#[macro_export]` to make it possible to
-//! import it from outside. To change this behavior, use the `#[non_export]` attribute:
-//! ```
-//! mod macros {
-//!     # use opt_args::*;
-//!     #
-//!     opt_args! {
-//!         #[opt_args(shuffle)]
-//!         pub fn f(a: u8?, b: u8?) -> u8 {
-//!             a + b
-//!         }
-//!      }
-//! }
-//! use macros::f;
-//! f!();
-//! ```
-//! ```compile_fail
-//! mod macros {
-//!     # use opt_args::*;
-//!     #
-//!     opt_args! {
-//!         #[opt_args(shuffle, non_export)]
-//!         pub fn f(a: u8?, b: u8?) -> u8 {
-//!             a + b
-//!         }
-//!      }
-//! }
-//! use macros::f;
-//! f!();
 //! ```
 
 use proc_macro::TokenStream as TokenStream1;
@@ -345,8 +380,8 @@ fn internal(mut opt_args_item: OptArgsItem) -> syn::Result<TokenStream> {
     );
 
     Ok(quote!(
-        #macro_export
         #[allow(non_snake_case, unused)]
+        #macro_export
         macro_rules! #macro_ident {
             #(#macro_branches);*
         }
