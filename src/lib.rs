@@ -2,7 +2,41 @@
 //!
 //! This crate lets you easily derive macros to call functions and instantiate structs
 //! without having to specify all of their arguments.
-//! Wrap the attribute around a function or struct to generate a macro that can be called with named optional arguments.
+//! Wrap your function or struct inside an [`macro@opt_args`] body
+//! to generate a macro that can be called with named optional arguments.
+//! ```
+//! use opt_args::opt_args;
+//!
+//! opt_args! {
+//!     fn function(a: i32, b: &str = "default", c: (u8,)?) -> (i32, &str, (u8,)) {
+//!         (a, b, c)
+//!     }
+//! }
+//!
+//! opt_args! {
+//!     #[derive(Debug, PartialEq, Eq)]
+//!     struct Struct {
+//!         x: i32,
+//!         y: i32 = 1,
+//!         z: i32?,
+//!         other: Option<Box<Self>>?,
+//!     }
+//! }
+//!
+//! assert_eq!(
+//!     function!(1, b = "not the default"),
+//!     (1, "not the default", (0,))
+//! );
+//! assert_eq!(
+//!     Struct!(4, z = 5),
+//!     Struct {
+//!         x: 4,
+//!         y: 1,
+//!         z: 5,
+//!         other: None
+//!     }
+//! );
+//! ```
 //!
 //! # Using the macro
 //! To use the macro, just wrap the target item (function or struct) inside the macro body.
@@ -46,15 +80,14 @@
 //! # use opt_args::*;
 //! #
 //! opt_args! {
-//!     fn f(a: u8, b: u8?, c: u8 = 9) -> u8 {
+//!     fn f(a: u8, b: u8 = 5, c: u8?) -> u8 {
 //!         a + b + c
 //!     }
 //! }
 //!
 //! let result = f!(1, c = 3);
-//! assert_eq!(result, 1 + 0 + 3);
+//! assert_eq!(result, 1 + 5 + 3);
 //! ```
-//! In this case we would have `b = 0`, since no default value was provided for `b`.
 //!
 //! # Options
 //! ## Order of optionals
@@ -65,12 +98,12 @@
 //! # use opt_args::*;
 //! #
 //! opt_args! {
-//!     fn f(a: u8?, b: u8?, c: u8?) -> u8 {
+//!     fn f(a: u8, b: u8 = 5, c: u8?) -> u8 {
 //!         a + b + c
 //!     }
 //! }
 //!
-//! let result = f!(c = 3, a = 1);
+//! let result = f!(1, c = 3, b = 0);
 //! assert_eq!(result, 1 + 0 + 3);
 //! ```
 //! This behavior can be changed with the `shuffle` attribute. This attribute allows to call the
@@ -80,17 +113,17 @@
 //! #
 //! opt_args! {
 //!     #[opt_args(shuffle)]
-//!     fn f(a: u8?, b: u8?, c: u8?) -> u8 {
+//!     fn f(a: u8, b: u8 = 5, c: u8?) -> u8 {
 //!         a + b + c
 //!     }
 //! }
 //!
-//! let result = f!(c = 3, a = 1);
-//! assert_eq!(result, 1 + 0 + 3);
+//! let result = f!(1, c = 3, b = 1);
+//! assert_eq!(result, 1 + 1 + 3);
 //! ```
 //! <span style="color:red">**IMPORTANT**</span>: this doesn't come without disadvantage:
 //! to obtain this result, [`macro@opt_args`] creates a macro that matches any possible
-//! permutation the of given optional arguments. When applying the `shuffle` attribute,
+//! permutation of the given optional arguments. When applying the `shuffle` attribute,
 //! the number of possible permutations scales in the order of `n!`, where `n` is the number of
 //! optional arguments.
 //! While macro expansion has no impact on runtime, it may impact compile time
@@ -98,20 +131,20 @@
 //!
 //! ## Export the macro
 //! By default, the generated macro is annotated with `#[macro_export]` to make it possible to
-//! import it from outside. To change this behavior, use the `non_export` attribute:
+//! use it from outside. To change this behavior, use the `non_export` attribute:
 //! ```compile_fail
 //! mod macros {
 //!     # use opt_args::*;
 //!     #
 //!     opt_args! {
 //!         #[opt_args(shuffle, non_export)]
-//!         pub fn f(a: u8?, b: u8?) -> u8 {
-//!             a + b
+//!         pub fn f(a: u8, b: u8 = 5, c: u8?) -> u8 {
+//!             a + b + c
 //!         }
 //!      }
 //! }
 //! use macros::f;
-//! f!();
+//! f!(1);
 //! ```
 //! ```
 //! mod macros {
@@ -119,13 +152,13 @@
 //!     #
 //!     opt_args! {
 //!         #[opt_args(shuffle)]
-//!         pub fn f(a: u8?, b: u8?) -> u8 {
-//!             a + b
+//!         pub fn f(a: u8, b: u8 = 5, c: u8?) -> u8 {
+//!             a + b + c
 //!         }
 //!      }
 //! }
 //! use macros::f;
-//! f!();
+//! f!(1);
 //! ```
 //! Of course for the macro to work outside the original module, it's needed that the original item
 //! is available in the same scope where the macro is used:
@@ -135,13 +168,13 @@
 //!     #
 //!     opt_args! {
 //!         #[opt_args(shuffle)]
-//!         fn f(a: u8?, b: u8?) -> u8 {
-//!             a + b
+//!         fn f(a: u8, b: u8 = 5, c: u8?) -> u8 {
+//!             a + b + c
 //!         }
 //!      }
 //! }
 //! use macros::f;
-//! f!();
+//! f!(1);
 //! ```
 //! In the above example the function macro `macros::f` is reachable, but the function `macros::f`
 //! is not.
@@ -214,7 +247,6 @@
 //! ```
 //! # use opt_args::*;
 //! #
-//! // doesn't implement `Default`
 //! struct X {
 //!     x: usize
 //! }
@@ -242,11 +274,10 @@
 //! # }
 //! f!();
 //! ```
-//! would result in a call to `f(X { x: 0 }, Default::default())` which would trigger the compile error:
+//! This would result in a call to `f(X { x: 0 }, Default::default())` which would trigger the compile error:
 //! ```the trait `Default` is not implemented for `X` ```.
 //!
-//! This may appear useless at first, but it may be useful to force the caller to pass the argument
-//! `b` as a named argument.
+//! This may be useful to force the caller to pass the argument `b` as a named argument.
 //!
 //! # Structs
 //! The syntax and usage of the macro for structs is the same as it is for functions:
@@ -292,16 +323,37 @@ mod tokens;
 
 /// Wrap the item (function or struct) inside the macro to declare optional arguments
 /// ```
-/// # use opt_args::*;
-/// #
+/// use opt_args::opt_args;
+///
 /// opt_args! {
-///     fn f(a: u8, b: u8 = 5, c: u8?) -> u8 {
-///         a + b + c
+///     fn function(a: i32, b: &str = "default", c: (u8,)?) -> (i32, &str, (u8,)) {
+///         (a, b, c)
 ///     }
 /// }
 ///
-/// let result = f!(1);
-/// assert_eq!(result, 1 + 5 + 0);
+/// opt_args! {
+///     #[derive(Debug, PartialEq, Eq)]
+///     struct Struct {
+///         x: i32,
+///         y: i32 = 1,
+///         z: i32?,
+///         other: Option<Box<Self>>?,
+///     }
+/// }
+///
+/// assert_eq!(
+///     function!(1, b = "not the default"),
+///     (1, "not the default", (0,))
+/// );
+/// assert_eq!(
+///     Struct!(4, z = 5),
+///     Struct {
+///         x: 4,
+///         y: 1,
+///         z: 5,
+///         other: None
+///     }
+/// );
 /// ```
 #[proc_macro]
 pub fn opt_args(item: TokenStream1) -> TokenStream1 {

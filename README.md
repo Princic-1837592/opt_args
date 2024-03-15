@@ -15,18 +15,18 @@ Import the macro and use it on a function or struct like this
 use opt_args::opt_args;
 
 opt_args! {
-    fn f(a: i32, b: u64, c: &str = "default", d: (u8,)?, e: Option<[f64; 42]>?) {
-        println!("a = {}, b = {}, c = {}, d = {:?}, e = {:?}", a, b, c, d, e);
+    fn function(a: i32, b: &str = "default", c: (u8,)?) -> (i32, &str, (u8,)) {
+        (a, b, c)
     }
 }
 
 opt_args! {
-    #[derive(Debug)]
-    struct S {
+    #[derive(Debug, PartialEq, Eq)]
+    struct Struct {
         x: i32,
         y: i32 = 1,
         z: i32?,
-        next: Option<Box<S>>?,
+        other: Option<Box<Self>>?,
     }
 }
 ```
@@ -35,8 +35,19 @@ To auto-generate macros that can be used like this
 
 ```rust
 fn main() {
-    f!(1, 2, d = (1,));             // prints `a = 1, b = 2, c = default, d = (1,), e = None`
-    println!("{:?}", S!(4, z = 5)); // prints `S { x: 4, y: 1, z: 5, next: None }`
+    assert_eq!(
+        function!(1, b = "not the default"),
+        (1, "not the default", (0,))
+    );
+    assert_eq!(
+        Struct!(4, z = 5),
+        Struct {
+            x: 4,
+            y: 1,
+            z: 5,
+            other: None
+        }
+    );
 }
 ```
 
